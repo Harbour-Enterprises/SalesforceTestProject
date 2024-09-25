@@ -1,0 +1,13 @@
+<template>
+  <lightning-card title="Template Settings">
+    <div class="slds-p-horizontal_medium">
+      <lightning-combobox
+        label="Choose a Template"
+        value={selectedTemplate}
+        options={availableTemplates}
+        onchange={handleSelectedTemplateChange}
+      >
+      </lightning-combobox>
+    </div>
+  </lightning-card>
+</template>
