@@ -1,6 +1,9 @@
 import { LightningElement, track, wire } from "lwc";
 import { ShowToastEvent } from "lightning/platformShowToastEvent";
+import { NavigationMixin } from "lightning/navigation";
+import hasTemplateSettings from "@salesforce/customPermission/Template_Settings";
 
+// Custom Apex code
 import getTemplates from "@salesforce/apex/TemplateSettings.getTemplates";
 import getAllObjects from "@salesforce/apex/ObjectHandler.getAllObjects";
 import getObjectFields from "@salesforce/apex/ObjectFieldsHandler.getObjectFields";
@@ -8,8 +11,11 @@ import createTemplateMapping from "@salesforce/apex/TemplateMappingHandler.creat
 import getTemplateMappings from "@salesforce/apex/TemplateMappingHandler.getTemplateMappings";
 import getTemplateMappingByIds from "@salesforce/apex/TemplateMappingHandler.getTemplateMappingByIds";
 import updateTemplateMapping from "@salesforce/apex/TemplateMappingHandler.updateTemplateMapping";
+import checkTemplateSettingsAccess from "@salesforce/apex/TemplateSettingsAuthorization.hasAccess"; // Server-side permission check
 
-export default class TemplateSettings extends LightningElement {
+export default class TemplateSettings extends NavigationMixin(
+  LightningElement
+) {
   @track availableTemplates = [];
   @track selectedTemplate = "";
   @track templateInputs = [];
@@ -17,10 +23,40 @@ export default class TemplateSettings extends LightningElement {
   @track selectedObject = "";
   @track error;
 
+  isLoading = false;
   fullTemplateData = [];
 
   connectedCallback() {
-    this.loadTemplates();
+    // Client side check
+    if (hasTemplateSettings) {
+      //Server side check
+      checkTemplateSettingsAccess()
+        .then((result) => {
+          if (result) {
+            this.loadTemplates();
+          } else {
+            this.redirectToHome();
+          }
+        })
+        .catch((error) => {
+          this.showToast("Error", "Error checking access: " + error, "error");
+          console.error("Error checking access: ", error);
+          this.redirectToHome();
+        });
+    } else {
+      this.redirectToHome();
+    }
+  }
+
+  redirectToHome() {
+    // Redirect to the Account home page
+    this[NavigationMixin.Navigate]({
+      type: "standard__objectPage",
+      attributes: {
+        objectApiName: "Account",
+        actionName: "home"
+      }
+    });
   }
 
   @wire(getAllObjects)
@@ -55,6 +91,7 @@ export default class TemplateSettings extends LightningElement {
   }
 
   handleSelectedTemplateChange(event) {
+    this.isLoading = true;
     this.selectedTemplate = event.detail.value;
 
     // Find the selected template and set its inputs
@@ -119,6 +156,7 @@ export default class TemplateSettings extends LightningElement {
             })
           ).then((updatedInputs) => {
             // Once all promises resolve, update templateInputs
+            this.isLoading = false;
             this.templateInputs = updatedInputs;
           });
         })
@@ -191,79 +229,99 @@ export default class TemplateSettings extends LightningElement {
       (template) => template.value === this.selectedTemplate
     );
 
+    let isValidated = true;
+
     this.templateInputs.forEach((input) => {
-      input.template_id = selectedTemplateData.id;
+      // Check if the input is required and selectedObject is blank
+      if (
+        input.required &&
+        (input.selectedObject === undefined || !input.selectedObject)
+      ) {
+        // Show an error and set the validation flag to true
+        this.showToast(
+          "Error",
+          `Input ${input.label} is required but no mapping is selected`,
+          "error"
+        );
+        isValidated = false; // Mark validation error
+      }
     });
 
-    // Loop through each templateInput and check for existing mappings, then update or create
-    const savePromises = this.templateInputs.map((input) => {
-      return getTemplateMappingByIds({
-        templateId: input.template_id,
-        inputId: input.id
-      })
-        .then((existingMapping) => {
-          if (existingMapping) {
-            // Update existing mapping
-            return updateTemplateMapping({
-              mappingId: existingMapping.Id,
+    if (isValidated) {
+      this.templateInputs.forEach((input) => {
+        input.template_id = selectedTemplateData.id;
+      });
+
+      // Loop through each templateInput and check for existing mappings, then update or create
+      const savePromises = this.templateInputs.map((input) => {
+        return getTemplateMappingByIds({
+          templateId: input.template_id,
+          inputId: input.id
+        })
+          .then((existingMapping) => {
+            if (existingMapping) {
+              // Update existing mapping
+              return updateTemplateMapping({
+                mappingId: existingMapping.Id,
+                templateId: input.template_id,
+                inputId: input.id,
+                objectApiName: input.selectedObject,
+                fieldApiName: input.selectedObjectField
+              })
+                .then((result) => {
+                  console.log(
+                    "Individual mapping updated successfully: ",
+                    result
+                  );
+                })
+                .catch((error) => {
+                  this.showToast(
+                    "Error",
+                    "Error updating mapping: " + error,
+                    "error"
+                  );
+                });
+            }
+            // Create new mapping
+            return createTemplateMapping({
               templateId: input.template_id,
               inputId: input.id,
               objectApiName: input.selectedObject,
               fieldApiName: input.selectedObjectField
             })
               .then((result) => {
-                console.log(
-                  "Individual mapping updated successfully: ",
-                  result
-                );
+                console.log("New mapping created successfully: ", result);
               })
               .catch((error) => {
                 this.showToast(
                   "Error",
-                  "Error updating mapping: " + error,
+                  "Error creating mapping: " + error,
                   "error"
                 );
               });
-          }
-          // Create new mapping
-          return createTemplateMapping({
-            templateId: input.template_id,
-            inputId: input.id,
-            objectApiName: input.selectedObject,
-            fieldApiName: input.selectedObjectField
           })
-            .then((result) => {
-              console.log("New mapping created successfully: ", result);
-            })
-            .catch((error) => {
-              this.showToast(
-                "Error",
-                "Error creating mapping: " + error,
-                "error"
-              );
-            });
+          .catch((error) => {
+            this.showToast(
+              "Error",
+              "Error fetching existing mapping: " + error,
+              "error"
+            );
+          });
+      });
+
+      // Wait for all promises to resolve
+      Promise.all(savePromises)
+        .then(() => {
+          this.showToast(
+            "Success",
+            "All mappings created successfully",
+            "success"
+          );
         })
         .catch((error) => {
-          this.showToast(
-            "Error",
-            "Error fetching existing mapping: " + error,
-            "error"
-          );
+          this.showToast("Error", "Error creating mapping" + error, "error");
         });
-    });
-
-    // Wait for all promises to resolve
-    Promise.all(savePromises)
-      .then(() => {
-        this.showToast(
-          "Success",
-          "All mappings created successfully",
-          "success"
-        );
-      })
-      .catch((error) => {
-        this.showToast("Error", "Error creating mapping" + error, "error");
-      });
+    }
   }
 
   showToast(title, message, variant) {
@@ -275,8 +333,3 @@ export default class TemplateSettings extends LightningElement {
     this.dispatchEvent(event);
   }
 }
-
-// console.log(
-//   "Current templateInputs:",
-//   JSON.stringify(this.templateInputs, null, 2)
-// );
