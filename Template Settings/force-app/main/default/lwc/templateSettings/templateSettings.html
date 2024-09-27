@@ -76,13 +76,15 @@
                 onchange={handleObjectChange}
                 placeholder="Select an object"
               ></lightning-combobox>
-              <lightning-combobox
-                options={input.fields}
-                data-id={input.id}
-                value={input.selectedObjectField}
-                onchange={handleObjectFieldChange}
-                placeholder="Choose a field"
-              ></lightning-combobox>
+              <template if:true={input.selectedObject}>
+                <lightning-combobox
+                  options={input.fields}
+                  data-id={input.id}
+                  value={input.selectedObjectField}
+                  onchange={handleObjectFieldChange}
+                  placeholder="Choose a field"
+                ></lightning-combobox
+              ></template>
             </div>
           </div>
         </template>

@@ -5,6 +5,9 @@ import getTemplates from "@salesforce/apex/TemplateSettings.getTemplates";
 import getAllObjects from "@salesforce/apex/ObjectHandler.getAllObjects";
 import getObjectFields from "@salesforce/apex/ObjectFieldsHandler.getObjectFields";
 import createTemplateMapping from "@salesforce/apex/TemplateMappingHandler.createTemplateMapping";
+import getTemplateMappings from "@salesforce/apex/TemplateMappingHandler.getTemplateMappings";
+import getTemplateMappingByIds from "@salesforce/apex/TemplateMappingHandler.getTemplateMappingByIds";
+import updateTemplateMapping from "@salesforce/apex/TemplateMappingHandler.updateTemplateMapping";
 
 export default class TemplateSettings extends LightningElement {
   @track availableTemplates = [];
@@ -37,8 +40,12 @@ export default class TemplateSettings extends LightningElement {
   async loadTemplates() {
     try {
       const templates = await getTemplates();
-      this.fullTemplateData = templates;
-      this.availableTemplates = templates.map((template) => {
+      // Filter templates where document_inputs has a length > 0
+      this.fullTemplateData = templates.filter(
+        (template) =>
+          template.document_inputs && template.document_inputs.length > 0
+      );
+      this.availableTemplates = this.fullTemplateData.map((template) => {
         // The template value is used in both places because the type may not be unique but the title likely would be
         return { label: template.value, value: template.value };
       });
@@ -54,18 +61,74 @@ export default class TemplateSettings extends LightningElement {
     const selectedTemplateData = this.fullTemplateData.find(
       (template) => template.value === this.selectedTemplate
     );
-    if (selectedTemplateData && selectedTemplateData.document_inputs) {
-      this.templateInputs = selectedTemplateData.document_inputs.map(
-        (input) => ({
-          id: input.id,
-          label: input.internal_label,
-          required: input.is_required,
-          placeholder: input.place_holder,
-          preferredIcon: input.preferred_icon,
-          isTextInput: input.field_type === "TEXTINPUT",
-          isImageInput: input.field_type === "IMAGEINPUT"
+
+    if (selectedTemplateData) {
+      const selectedTemplateId = selectedTemplateData.id;
+
+      // Fetch the template mappings from Apex
+      getTemplateMappings({ templateId: selectedTemplateId })
+        .then((mappings) => {
+          // Update templateInputs based on the template and mappings
+          Promise.all(
+            selectedTemplateData.document_inputs.map((input) => {
+              const mapping = mappings.find((m) => m.Input_ID__c === input.id);
+
+              if (mapping) {
+                // Fetch object fields only if mapping exists
+                return getObjectFields({
+                  objectName: mapping.Salesforce_Object_API_Name__c
+                }).then((fields) => {
+                  // Filter fields based on the input type
+                  const filteredFields = fields.filter((field) => {
+                    if (input.field_type === "TEXTINPUT") {
+                      return field.type === "STRING";
+                    } else if (input.field_type === "IMAGEINPUT") {
+                      return field.type === "TEXTAREA";
+                    }
+                    return false;
+                  });
+
+                  // Return updated input with fields
+                  return {
+                    id: input.id,
+                    label: input.internal_label,
+                    required: input.is_required,
+                    placeholder: input.place_holder,
+                    preferredIcon: input.preferred_icon,
+                    isTextInput: input.field_type === "TEXTINPUT",
+                    isImageInput: input.field_type === "IMAGEINPUT",
+                    selectedObject: mapping.Salesforce_Object_API_Name__c,
+                    selectedObjectField: mapping.Salesforce_Field_API_Name__c,
+                    fields: filteredFields // Attach the filtered fields
+                  };
+                });
+              }
+              // Return input as is if no mapping exists
+              return {
+                id: input.id,
+                label: input.internal_label,
+                required: input.is_required,
+                placeholder: input.place_holder,
+                preferredIcon: input.preferred_icon,
+                isTextInput: input.field_type === "TEXTINPUT",
+                isImageInput: input.field_type === "IMAGEINPUT",
+                selectedObject: "",
+                selectedObjectField: "",
+                fields: []
+              };
+            })
+          ).then((updatedInputs) => {
+            // Once all promises resolve, update templateInputs
+            this.templateInputs = updatedInputs;
+          });
         })
-      );
+        .catch((error) => {
+          this.showToast(
+            "Error",
+            "Error fetching template mappings: " + error,
+            "error"
+          );
+        });
     }
   }
 
@@ -127,23 +190,65 @@ export default class TemplateSettings extends LightningElement {
     const selectedTemplateData = this.fullTemplateData.find(
       (template) => template.value === this.selectedTemplate
     );
+
     this.templateInputs.forEach((input) => {
       input.template_id = selectedTemplateData.id;
     });
 
-    // Loop through each templateInput and create corresponding Template_Mapping__c records
+    // Loop through each templateInput and check for existing mappings, then update or create
     const savePromises = this.templateInputs.map((input) => {
-      return createTemplateMapping({
-        templateId: input.template_id, // Replace with actual template ID
-        inputId: input.id,
-        objectApiName: input.selectedObject,
-        fieldApiName: input.selectedObjectField // Assuming this holds the selected field's API name
+      return getTemplateMappingByIds({
+        templateId: input.template_id,
+        inputId: input.id
       })
-        .then((result) => {
-          console.log("Mapping created successfully: ", result);
+        .then((existingMapping) => {
+          if (existingMapping) {
+            // Update existing mapping
+            return updateTemplateMapping({
+              mappingId: existingMapping.Id,
+              templateId: input.template_id,
+              inputId: input.id,
+              objectApiName: input.selectedObject,
+              fieldApiName: input.selectedObjectField
+            })
+              .then((result) => {
+                console.log(
+                  "Individual mapping updated successfully: ",
+                  result
+                );
+              })
+              .catch((error) => {
+                this.showToast(
+                  "Error",
+                  "Error updating mapping: " + error,
+                  "error"
+                );
+              });
+          }
+          // Create new mapping
+          return createTemplateMapping({
+            templateId: input.template_id,
+            inputId: input.id,
+            objectApiName: input.selectedObject,
+            fieldApiName: input.selectedObjectField
+          })
+            .then((result) => {
+              console.log("New mapping created successfully: ", result);
+            })
+            .catch((error) => {
+              this.showToast(
+                "Error",
+                "Error creating mapping: " + error,
+                "error"
+              );
+            });
         })
         .catch((error) => {
-          this.showToast("Error", "Error creating mapping" + error, "error");
+          this.showToast(
+            "Error",
+            "Error fetching existing mapping: " + error,
+            "error"
+          );
         });
     });
 

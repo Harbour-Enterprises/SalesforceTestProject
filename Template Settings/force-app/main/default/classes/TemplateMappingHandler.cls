@@ -17,7 +17,7 @@ public with sharing class TemplateMappingHandler {
     return mapping;
   }
 
-  // Read operation
+  // Read operations
   @AuraEnabled(cacheable=true)
   public static List<Template_Mapping__c> getAllTemplateMappings() {
     return [
@@ -29,6 +29,41 @@ public with sharing class TemplateMappingHandler {
         Salesforce_Field_API_Name__c
       FROM Template_Mapping__c
     ];
+  }
+
+  @AuraEnabled(cacheable=true)
+  public static List<Template_Mapping__c> getTemplateMappings(
+    String templateId
+  ) {
+    return [
+      SELECT
+        Id,
+        Template_ID__c,
+        Input_ID__c,
+        Salesforce_Object_API_Name__c,
+        Salesforce_Field_API_Name__c
+      FROM Template_Mapping__c
+      WHERE Template_ID__c = :templateId
+    ];
+  }
+
+  @AuraEnabled(cacheable=true)
+  public static Template_Mapping__c getTemplateMappingByIds(
+    String templateId,
+    String inputId
+  ) {
+    List<Template_Mapping__c> mappings = [
+      SELECT
+        Id,
+        Template_ID__c,
+        Input_ID__c,
+        Salesforce_Object_API_Name__c,
+        Salesforce_Field_API_Name__c
+      FROM Template_Mapping__c
+      WHERE Template_ID__c = :templateId AND Input_ID__c = :inputId
+      LIMIT 1
+    ];
+    return mappings.isEmpty() ? null : mappings[0];
   }
 
   // Update operation

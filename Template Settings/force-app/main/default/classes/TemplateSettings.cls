@@ -84,32 +84,6 @@ public with sharing class TemplateSettings {
     }
   }
 
-  // Wrapper class for agreement details
-  public class AgreementWrapper {
-    @AuraEnabled
-    public String templateType;
-    @AuraEnabled
-    public String title;
-  }
-
-  // Wrapper class for template data
-  public class TemplateWrapper {
-    @AuraEnabled
-    public String template_type;
-    @AuraEnabled
-    public String title;
-  }
-
-  // Wrapper class for document inputs
-  public class DocumentInputWrapper {
-    @AuraEnabled
-    public String id;
-    @AuraEnabled
-    public String name;
-    @AuraEnabled
-    public String type; // Assuming 'document_inputs' have 'id', 'name', and 'type'
-  }
-
   // Default constructor
   public TemplateSettings() {
   }
