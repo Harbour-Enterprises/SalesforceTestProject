@@ -8,6 +8,82 @@
         onchange={handleSelectedTemplateChange}
       >
       </lightning-combobox>
+
+      <div
+        class="slds-p-bottom_x_small slds-p-top_medium slds-text-align_center"
+      >
+        <template if:true={templateInputs.length}>
+          <div
+            class="slds-text-heading_medium slds-p-bottom_x_small slds-text-align_left"
+          >
+            Map inputs
+          </div>
+          <div class="slds-p-horizontal_medium">
+            <div
+              class="slds-grid slds-gutters slds-text-heading_small slds-border_bottom"
+            >
+              <div class="slds-col slds-size_1-of-3 slds-p-bottom_small">
+                Input
+              </div>
+              <div class="slds-col slds-border_left slds-size_1-of-3">
+                Required?
+              </div>
+              <div class="slds-col slds-border_left slds-size_1-of-3">
+                Maps to
+              </div>
+            </div>
+          </div>
+        </template>
+        <template for:each={templateInputs} for:item="input">
+          <div
+            key={input.id}
+            class="slds-grid slds-gutters slds-p-horizontal_medium"
+          >
+            <div class="slds-col slds-size_1-of-3 slds-p-top_small">
+              <div class="slds-text-heading_small">{input.label}</div>
+
+              <div>
+                Type:
+                <template if:true={input.isTextInput}>Text</template>
+                <template if:true={input.isImageInput}>Image</template>
+              </div>
+            </div>
+            <div
+              class="slds-col slds-border_left slds-size_1-of-3 slds-p-top_medium"
+            >
+              <template if:true={input.required}
+                ><lightning-icon
+                  icon-name="utility:check"
+                  alternative-text="Required"
+                  size="small"
+                ></lightning-icon
+              ></template>
+              <template if:false={input.required}>
+                <lightning-icon
+                  icon-name="utility:close"
+                  alternative-text="Not Required"
+                  size="small"
+                ></lightning-icon>
+              </template>
+            </div>
+            <div
+              class="slds-col slds-border_left slds-size_1-of-3 slds-p-bottom_large slds-p-top_small"
+            >
+              <div>
+                <label>Object</label>
+                <lightning-combobox
+                  id={input.id}
+                  options={objects}
+                  value={input.selectedObject}
+                  onchange={handleObjectChange}
+                  placeholder="Select an object"
+                ></lightning-combobox>
+              </div>
+              <div></div>
+            </div>
+          </div>
+        </template>
+      </div>
     </div>
   </lightning-card>
 </template>
