@@ -12,10 +12,9 @@ public with sharing class TemplateSettings {
       // Make the request
       res = http.send(req);
     } catch (Exception e) {
-      // throw new AuraHandledException(
-      //   'Error getting the templates: ' + e.getMessage()
-      // );
-      return new List<Map<String, String>>(); // Return an empty list in case of failure
+      throw new AuraHandledException(
+        'Error getting the templates: ' + e.getMessage()
+      );
     }
 
     if (res.getStatusCode() == 200) {
@@ -36,6 +35,7 @@ public with sharing class TemplateSettings {
           // Extract the fields
           String templateType = (String) agreementMap.get('template_type');
           String title = (String) agreementMap.get('title');
+          String templateId = (String) agreementMap.get('id');
 
           // Extract the document_inputs array
           List<Object> documentInputs = (List<Object>) agreementMap.get(
@@ -59,6 +59,7 @@ public with sharing class TemplateSettings {
             Map<String, Object> templateData = new Map<String, Object>();
             templateData.put('type', templateType);
             templateData.put('value', title);
+            templateData.put('id', templateId);
 
             // Add document_inputs to the template data
             templateData.put('document_inputs', documentInputs);
@@ -71,18 +72,15 @@ public with sharing class TemplateSettings {
         // Return the list of templates with document_inputs
         return templateList;
       } catch (Exception e) {
-        // throw new AuraHandledException(
-        //   'Error processing the response: ' + e.getMessage()
-        // );
-        return new List<Map<String, String>>(); // Return an empty list if deserialization fails
+        throw new AuraHandledException(
+          'Error processing the response: ' + e.getMessage()
+        );
       }
     } else {
       // Show the status code and response for non-200 responses
-      // throw new AuraHandledException(
-      //   'Failed to fetch templates. Status Code: ' + res.getStatusCode()
-      // );
-      System.debug('Response Body: ' + res.getBody());
-      return new List<Map<String, String>>(); // Return an empty list in case of non-200 response
+      throw new AuraHandledException(
+        'Failed to fetch templates. Status Code: ' + res.getStatusCode()
+      );
     }
   }
 
